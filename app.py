@@ -1,13 +1,10 @@
 """
-Apple Earnings RAG — Full Web App
+Advanced RAG Web App — EarningsIQ
 ===================================
-A Streamlit web app with two pages:
-  1. 💬 Ask Questions  — query your RAG system from the browser
-  2. 📊 Dashboard      — live stats from ChromaDB and Ollama
-
-Usage:
-    pip install streamlit
-    streamlit run app.py
+Three pages:
+  1. Compare — Basic RAG vs Advanced RAG side by side
+  2. Advanced Chat — full chat with rewriting + re-ranking
+  3. Dashboard — live system stats
 """
 
 import streamlit as st
@@ -17,163 +14,68 @@ import time
 import sys
 import os
 
-# ── Page config ────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Apple Earnings RAG",
+    page_title="EarningsIQ Advanced RAG",
     page_icon="🍎",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ── Custom CSS ─────────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Main background */
     .stApp { background-color: #0a0c10; color: #e8eaf0; }
-
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #111318;
-        border-right: 1px solid #2a2d35;
-    }
-
-    /* Metric cards */
-    [data-testid="stMetric"] {
-        background-color: #1a1d24;
-        border: 1px solid #2a2d35;
-        border-radius: 10px;
-        padding: 16px;
-    }
+    [data-testid="stSidebar"] { background-color: #111318; border-right: 1px solid #2a2d35; }
+    [data-testid="stMetric"] { background-color: #1a1d24; border: 1px solid #2a2d35; border-radius: 10px; padding: 16px; }
     [data-testid="stMetricValue"] { color: #00ff88 !important; }
     [data-testid="stMetricLabel"] { color: #6b7280 !important; }
-
-    /* Chat messages */
-    [data-testid="stChatMessage"] {
-        background-color: #1a1d24;
-        border: 1px solid #2a2d35;
-        border-radius: 10px;
-        margin-bottom: 8px;
-    }
-
-    /* Input box */
-    [data-testid="stChatInput"] textarea {
-        background-color: #1a1d24 !important;
-        border: 1px solid #2a2d35 !important;
-        color: #e8eaf0 !important;
-    }
-
-    /* Buttons */
-    .stButton button {
-        background-color: #1a1d24;
-        border: 1px solid #00ff88;
-        color: #00ff88;
-        border-radius: 8px;
-    }
-    .stButton button:hover {
-        background-color: #00ff88;
-        color: #0a0c10;
-    }
-
-    /* Source chips */
-    .source-chip {
-        display: inline-block;
-        background: rgba(0,255,136,0.08);
-        border: 1px solid rgba(0,255,136,0.2);
-        color: #00ff88;
-        padding: 2px 10px;
-        border-radius: 100px;
-        font-size: 11px;
-        margin: 2px;
-        font-family: monospace;
-    }
-
-    /* Section headers */
-    .section-header {
-        font-size: 13px;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        color: #6b7280;
-        margin-bottom: 12px;
-    }
-
-    /* Status badge */
-    .badge-green {
-        background: rgba(0,255,136,0.1);
-        border: 1px solid rgba(0,255,136,0.3);
-        color: #00ff88;
-        padding: 3px 12px;
-        border-radius: 100px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .badge-red {
-        background: rgba(255,74,107,0.1);
-        border: 1px solid rgba(255,74,107,0.3);
-        color: #ff4a6b;
-        padding: 3px 12px;
-        border-radius: 100px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    /* Divider */
+    [data-testid="stChatMessage"] { background-color: #1a1d24; border: 1px solid #2a2d35; border-radius: 10px; margin-bottom: 8px; }
+    .stButton button { background-color: #1a1d24; border: 1px solid #00ff88; color: #00ff88; border-radius: 8px; font-weight: 600; }
+    .stButton button:hover { background-color: #00ff88; color: #0a0c10; }
+    .basic-box { background: #1a1d24; border: 1px solid #2a2d35; border-top: 3px solid #6b7280; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+    .advanced-box { background: #1a1d24; border: 1px solid #2a2d35; border-top: 3px solid #00ff88; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+    .source-chip { display: inline-block; background: rgba(0,255,136,0.08); border: 1px solid rgba(0,255,136,0.2); color: #00ff88; padding: 2px 10px; border-radius: 100px; font-size: 11px; margin: 2px; font-family: monospace; }
+    .basic-chip { display: inline-block; background: rgba(107,114,128,0.15); border: 1px solid rgba(107,114,128,0.3); color: #9ca3af; padding: 2px 10px; border-radius: 100px; font-size: 11px; margin: 2px; font-family: monospace; }
+    .score-chip { display: inline-block; background: rgba(124,106,247,0.1); border: 1px solid rgba(124,106,247,0.2); color: #a78bfa; padding: 2px 10px; border-radius: 100px; font-size: 11px; margin: 2px; font-family: monospace; }
+    .badge-green { background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; padding: 3px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+    .badge-red { background: rgba(255,74,107,0.1); border: 1px solid rgba(255,74,107,0.3); color: #ff4a6b; padding: 3px 12px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+    .rewrite-box { background: rgba(0,255,136,0.05); border: 1px solid rgba(0,255,136,0.15); border-radius: 8px; padding: 12px; margin: 6px 0; font-size: 13px; font-family: monospace; color: #00ff88; }
     hr { border-color: #2a2d35; }
-
-    /* Dataframe */
-    [data-testid="stDataFrame"] { background-color: #1a1d24; }
-
-    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Constants ──────────────────────────────────────────────────
 CHROMA_PATH = "chroma"
 DATA_PATH   = "data"
 
-# ── Helper functions ───────────────────────────────────────────
 
 @st.cache_resource
 def get_chroma_client():
-    """Connect to ChromaDB — cached so it only connects once."""
     try:
-        client = chromadb.PersistentClient(path=CHROMA_PATH)
-        return client
-    except Exception as e:
+        return chromadb.PersistentClient(path=CHROMA_PATH)
+    except:
         return None
 
 
 def get_collection(client):
-    """Get the first collection from ChromaDB."""
     try:
-        collections = client.list_collections()
-        if collections:
-            return client.get_collection(collections[0].name)
-        return None
+        cols = client.list_collections()
+        return client.get_collection(cols[0].name) if cols else None
     except:
         return None
 
 
 def get_ollama_models():
-    """Get list of models loaded in Ollama."""
     try:
-        result = subprocess.run(
-            ["ollama", "list"],
-            capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
-            lines = result.stdout.strip().split("\n")[1:]  # skip header
+            lines = result.stdout.strip().split("\n")[1:]
             models = []
             for line in lines:
                 if line.strip():
                     parts = line.split()
                     if parts:
-                        models.append({
-                            "name": parts[0],
-                            "size": parts[2] if len(parts) > 2 else "?",
-                            "unit": parts[3] if len(parts) > 3 else ""
-                        })
+                        models.append({"name": parts[0], "size": parts[2] if len(parts) > 2 else "?"})
             return models, True
         return [], False
     except:
@@ -181,211 +83,278 @@ def get_ollama_models():
 
 
 def get_source_files(collection):
-    """Get unique source PDF files from ChromaDB metadata."""
     try:
         results = collection.get(include=["metadatas"])
         sources = set()
         for meta in results["metadatas"]:
             source = meta.get("source", "")
             if source:
-                # Extract just filename
-                filename = os.path.basename(source)
-                sources.add(filename)
+                sources.add(os.path.basename(source))
         return sorted(sources)
     except:
         return []
 
 
-def query_rag(question: str, k: int = 5):
-    """Run a RAG query and return response + sources."""
+def run_basic_rag(question: str, k: int = 5):
     try:
-        # Import here to avoid circular issues
-        from query_data import query_rag as _query_rag
-        # Temporarily patch k value
-        import query_data
-        original_k = 5
-
-        # Run the query
-        start = time.time()
-        response = _query_rag(question)
-        elapsed = time.time() - start
-
-        # Get sources separately
-        from langchain_ollama import OllamaEmbeddings
+        from query_data import query_rag
         from langchain_chroma import Chroma
         from get_embedding_function import get_embedding_function
 
+        start = time.time()
+        response = query_rag(question)
+        elapsed = time.time() - start
+
         embedding_function = get_embedding_function()
-        db = Chroma(
-            persist_directory=CHROMA_PATH,
-            embedding_function=embedding_function
-        )
+        db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_function)
         results = db.similarity_search_with_score(question, k=k)
         sources = [doc.metadata.get("id", doc.metadata.get("source", "")) for doc, _ in results]
         scores  = [round(score, 3) for _, score in results]
 
-        return response, sources, scores, elapsed
+        return {"response": response, "sources": sources, "scores": scores,
+                "elapsed": round(elapsed, 1), "chunks_retrieved": k}
     except Exception as e:
-        return f"Error: {e}", [], [], 0
+        return {"response": f"Error: {e}", "sources": [], "scores": [], "elapsed": 0, "chunks_retrieved": 0}
 
 
-# ── Sidebar ────────────────────────────────────────────────────
+def run_advanced_rag(question: str, strategy: str = "rewrite", k: int = 20, final_k: int = 5):
+    try:
+        from advanced_query import advanced_rag
+        return advanced_rag(question=question, strategy=strategy,
+                            retrieval_k=k, final_k=final_k, verbose=False)
+    except Exception as e:
+        return {"response": f"Error: {e}", "sources": [], "rerank_scores": [], "total_time": 0}
+
+
+# ── Sidebar ────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🍎 Apple RAG")
-    st.markdown("<p class='section-header'>Navigation</p>", unsafe_allow_html=True)
-
-    page = st.radio(
-        "",
-        ["💬 Ask Questions", "📊 Live Dashboard"],
-        label_visibility="collapsed"
-    )
+    st.markdown("## 🍎 EarningsIQ")
+    st.markdown("<p style='font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px'>Navigation</p>", unsafe_allow_html=True)
+    page = st.radio("", ["⚡ Compare RAG Modes", "💬 Advanced Chat", "📊 Live Dashboard"], label_visibility="collapsed")
 
     st.divider()
+    st.markdown("<p style='font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px'>System Status</p>", unsafe_allow_html=True)
 
-    # Quick system status in sidebar
-    st.markdown("<p class='section-header'>System Status</p>", unsafe_allow_html=True)
-
-    # ChromaDB status
     client = get_chroma_client()
-    if client:
-        collection = get_collection(client)
-        if collection:
-            chunk_count = collection.count()
-            st.markdown(f"🗄️ **ChromaDB** &nbsp; <span class='badge-green'>Connected</span>", unsafe_allow_html=True)
-            st.caption(f"{chunk_count} chunks indexed")
-        else:
-            st.markdown("🗄️ **ChromaDB** &nbsp; <span class='badge-red'>No collection</span>", unsafe_allow_html=True)
+    collection = get_collection(client) if client else None
+    chunk_count = collection.count() if collection else 0
+    if client and collection:
+        st.markdown("🗄️ **ChromaDB** &nbsp; <span class='badge-green'>Connected</span>", unsafe_allow_html=True)
+        st.caption(f"{chunk_count} chunks indexed")
     else:
         st.markdown("🗄️ **ChromaDB** &nbsp; <span class='badge-red'>Error</span>", unsafe_allow_html=True)
 
-    # Ollama status
     models, ollama_ok = get_ollama_models()
+    model_names = [m["name"] for m in models]
     if ollama_ok:
-        st.markdown(f"🦙 **Ollama** &nbsp; <span class='badge-green'>Running</span>", unsafe_allow_html=True)
+        st.markdown("🦙 **Ollama** &nbsp; <span class='badge-green'>Running</span>", unsafe_allow_html=True)
         for m in models:
             st.caption(f"  → {m['name']}")
     else:
-        st.markdown("🦙 **Ollama** &nbsp; <span class='badge-red'>Not running</span>", unsafe_allow_html=True)
+        st.markdown("🦙 **Ollama** &nbsp; <span class='badge-red'>Offline</span>", unsafe_allow_html=True)
+
+    st.markdown("🏆 **Cross-encoder** &nbsp; <span class='badge-green'>Cached</span>", unsafe_allow_html=True)
+    st.caption("ms-marco-MiniLM-L-6-v2")
 
     st.divider()
     st.caption("Built by Md Kamruzzaman")
-    st.caption("Local RAG · No API cost · Private")
+    st.caption("Advanced RAG · $0.00 · 100% Local")
 
 
-# ══════════════════════════════════════════════════════════════
-# PAGE 1 — ASK QUESTIONS
-# ══════════════════════════════════════════════════════════════
-if page == "💬 Ask Questions":
+# ══════════════════════════════════════════════════════════
+# PAGE 1 — COMPARE RAG MODES
+# ══════════════════════════════════════════════════════════
+if page == "⚡ Compare RAG Modes":
+    st.title("⚡ Basic vs Advanced RAG")
+    st.caption("Same question · two pipelines · see the difference query rewriting + re-ranking makes")
 
-    st.title("💬 Ask Apple Earnings Questions")
-    st.caption("Powered by Mistral 7B + ChromaDB · Running 100% locally")
-
-    # Settings expander
-    with st.expander("⚙️ Query Settings"):
-        k_value = st.slider(
-            "Number of chunks to retrieve (k)",
-            min_value=3, max_value=15, value=5,
-            help="Higher k = more context but slower. Try 10 for trend questions."
-        )
-        st.caption("💡 Use k=10 for questions about trends across multiple quarters")
+    with st.expander("⚙️ Settings"):
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            strategy = st.selectbox("Rewriting strategy", ["rewrite", "multi", "hyde"],
+                help="rewrite=simple · multi=3 phrasings (best for trends) · hyde=hypothetical answer")
+        with s2:
+            retrieval_k = st.slider("Retrieve k chunks", 10, 40, 20)
+        with s3:
+            final_k = st.slider("Keep after re-ranking", 3, 10, 5)
 
     st.divider()
-
-    # Suggested questions
-    st.markdown("<p class='section-header'>Suggested Questions</p>", unsafe_allow_html=True)
+    st.markdown("<p style='font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px'>These questions fail in basic RAG — try them</p>", unsafe_allow_html=True)
 
     suggestions = [
-        "What was Apple revenue in the September quarter 2024?",
-        "What did Tim Cook say about artificial intelligence?",
-        "What was Apple gross margin percentage in 2023?",
-        "How did iPhone revenue perform in 2022?",
-        "What was Apple Services revenue all time record?",
-        "How much cash did Apple return to shareholders?",
+        "What was Apple revenue in Q4 FY2024?",
+        "How did Apple Services revenue grow over the years?",
+        "What was Apple gross margin in Q3 FY2023?",
+        "How did iPhone revenue perform in FY2022?",
+        "What did Tim Cook say about AI in FY2024?",
     ]
+    scols = st.columns(5)
+    for i, s in enumerate(suggestions):
+        with scols[i]:
+            if st.button(s[:30] + "...", key=f"sug_{i}", use_container_width=True):
+                st.session_state["compare_q"] = s
 
-    cols = st.columns(3)
-    for i, suggestion in enumerate(suggestions):
-        with cols[i % 3]:
-            if st.button(suggestion, key=f"sug_{i}", use_container_width=True):
-                st.session_state["prefill_question"] = suggestion
+    st.divider()
+    question = st.text_input("Your question:",
+        value=st.session_state.get("compare_q", ""),
+        placeholder="What was Apple revenue in Q4 FY2024?")
+
+    if st.button("🚀 Run Comparison", use_container_width=True) and question:
+        st.session_state.pop("compare_q", None)
+
+        col_b, col_a = st.columns(2)
+
+        with col_b:
+            st.markdown("### 🔘 Basic RAG")
+            with st.spinner("Running basic pipeline..."):
+                basic = run_basic_rag(question, k=5)
+
+        with col_a:
+            st.markdown("### ✅ Advanced RAG")
+            with st.spinner(f"Rewriting ({strategy}) → retrieving → re-ranking..."):
+                adv = run_advanced_rag(question, strategy=strategy, k=retrieval_k, final_k=final_k)
+
+        with col_b:
+            st.markdown(f"""<div class='basic-box'>
+                <p style='font-size:11px;color:#6b7280;margin-bottom:8px'>BASIC · {basic.get('elapsed',0)}s · k=5 · no rewriting · no re-ranking</p>
+                <p style='font-size:14px;line-height:1.7'>{basic['response']}</p>
+            </div>""", unsafe_allow_html=True)
+            if basic.get("sources"):
+                chips = " ".join([f"<span class='basic-chip'>{os.path.basename(s)}</span>" for s in basic["sources"][:5]])
+                st.markdown(f"**Sources:** {chips}", unsafe_allow_html=True)
+
+        with col_a:
+            adv_time = adv.get("total_time", 0)
+            adv_chunks = adv.get("retrieval_count", retrieval_k)
+            st.markdown(f"""<div class='advanced-box'>
+                <p style='font-size:11px;color:#00ff88;margin-bottom:8px'>ADVANCED · {adv_time}s · {adv_chunks} chunks → re-ranked to {final_k} · strategy={strategy}</p>
+                <p style='font-size:14px;line-height:1.7'>{adv['response']}</p>
+            </div>""", unsafe_allow_html=True)
+            if adv.get("sources"):
+                chips = " ".join([f"<span class='source-chip'>{os.path.basename(s)}</span>" for s in adv["sources"][:5]])
+                st.markdown(f"**Sources:** {chips}", unsafe_allow_html=True)
+            if adv.get("rerank_scores"):
+                scores = " ".join([f"<span class='score-chip'>{s}</span>" for s in adv["rerank_scores"]])
+                st.markdown(f"**Re-rank scores:** {scores}", unsafe_allow_html=True)
+
+        # Rewrite details
+        st.divider()
+        st.markdown("**Query rewriting — what the system searched for:**")
+        if adv.get("rewritten_query"):
+            st.markdown(f"<div class='rewrite-box'>→ {adv['rewritten_query']}</div>", unsafe_allow_html=True)
+        elif adv.get("rewritten_queries"):
+            for q in adv["rewritten_queries"]:
+                st.markdown(f"<div class='rewrite-box'>→ {q}</div>", unsafe_allow_html=True)
+        elif adv.get("hypothetical_doc"):
+            st.markdown(f"<div class='rewrite-box'>HyDE: {adv['hypothetical_doc'][:300]}...</div>", unsafe_allow_html=True)
+
+        # Timing
+        if adv.get("rewrite_time"):
+            st.divider()
+            st.markdown("**Advanced RAG timing breakdown:**")
+            t1, t2, t3, t4 = st.columns(4)
+            t1.metric("✏️ Rewrite", f"{adv.get('rewrite_time',0)}s")
+            t2.metric("🗄️ Retrieval", f"{adv.get('retrieval_time',0)}s")
+            t3.metric("🏆 Re-rank", f"{adv.get('rerank_time',0)}s")
+            t4.metric("🌪️ Generation", f"{adv.get('generation_time',0)}s")
+
+
+# ══════════════════════════════════════════════════════════
+# PAGE 2 — ADVANCED CHAT
+# ══════════════════════════════════════════════════════════
+elif page == "💬 Advanced Chat":
+    st.title("💬 Advanced RAG Chat")
+    st.caption("Every question runs through query rewriting + cross-encoder re-ranking")
+
+    with st.expander("⚙️ Settings"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            chat_strategy = st.selectbox("Strategy", ["rewrite", "multi", "hyde"])
+        with c2:
+            chat_k = st.slider("Retrieve k", 10, 40, 20)
+        with c3:
+            chat_final_k = st.slider("Keep after re-rank", 3, 10, 5)
+
+    st.divider()
+    st.markdown("<p style='font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px'>Suggested Questions</p>", unsafe_allow_html=True)
+    chat_suggestions = [
+        "What was Apple total revenue in Q4 FY2024?",
+        "How did Apple Services revenue grow over the years?",
+        "What was Apple gross margin percentage in 2023?",
+        "How did iPhone revenue perform during 2022?",
+        "How much cash did Apple return to shareholders?",
+        "What was the highest revenue quarter for Apple?",
+    ]
+    chat_cols = st.columns(3)
+    for i, s in enumerate(chat_suggestions):
+        with chat_cols[i % 3]:
+            if st.button(s, key=f"cs_{i}", use_container_width=True):
+                st.session_state["chat_prefill"] = s
 
     st.divider()
 
-    # Chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
 
-    # Display chat history
-    for msg in st.session_state.messages:
+    for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg.get("sources"):
-                sources_html = " ".join([f"<span class='source-chip'>{s}</span>" for s in msg["sources"][:5]])
-                st.markdown(f"**Sources:** {sources_html}", unsafe_allow_html=True)
-            if msg.get("time"):
-                st.caption(f"⏱️ {msg['time']:.1f}s · k={msg.get('k', 5)} chunks retrieved")
+                chips = " ".join([f"<span class='source-chip'>{s}</span>" for s in msg["sources"]])
+                st.markdown(f"**Sources:** {chips}", unsafe_allow_html=True)
+            if msg.get("scores"):
+                sc = " ".join([f"<span class='score-chip'>{s}</span>" for s in msg["scores"]])
+                st.markdown(f"**Re-rank scores:** {sc}", unsafe_allow_html=True)
+            if msg.get("meta"):
+                st.caption(msg["meta"])
 
-    # Handle prefilled question from suggestion buttons
-    prefill = st.session_state.pop("prefill_question", None)
-
-    # Chat input
+    prefill = st.session_state.pop("chat_prefill", None)
     question = st.chat_input("Ask anything about Apple earnings...")
-
-    # Use prefill if button was clicked
     if prefill and not question:
         question = prefill
 
     if question:
-        # Show user message
         with st.chat_message("user"):
             st.markdown(question)
-        st.session_state.messages.append({"role": "user", "content": question})
+        st.session_state.chat_messages.append({"role": "user", "content": question})
 
-        # Get RAG response
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Searching ChromaDB → 🌪️ Mistral thinking..."):
-                response, sources, scores, elapsed = query_rag(question, k=k_value)
+            with st.spinner(f"Rewriting ({chat_strategy}) → {chat_k} chunks → re-ranking → Mistral..."):
+                result = run_advanced_rag(question, strategy=chat_strategy, k=chat_k, final_k=chat_final_k)
 
-            st.markdown(response)
+            st.markdown(result["response"])
+            clean_sources = [os.path.basename(s) for s in result.get("sources", [])[:5]]
+            scores = result.get("rerank_scores", [])
 
-            if sources:
-                # Clean up source names
-                clean_sources = []
-                for s in sources[:5]:
-                    name = os.path.basename(s) if s else s
-                    name = name.replace("data\\", "").replace("data/", "")
-                    clean_sources.append(name)
+            if clean_sources:
+                chips = " ".join([f"<span class='source-chip'>{s}</span>" for s in clean_sources])
+                st.markdown(f"**Sources:** {chips}", unsafe_allow_html=True)
+            if scores:
+                sc = " ".join([f"<span class='score-chip'>{s}</span>" for s in scores])
+                st.markdown(f"**Re-rank scores:** {sc}", unsafe_allow_html=True)
 
-                sources_html = " ".join([f"<span class='source-chip'>{s}</span>" for s in clean_sources])
-                st.markdown(f"**Sources:** {sources_html}", unsafe_allow_html=True)
+            meta = f"⏱️ {result.get('total_time',0)}s · strategy={chat_strategy} · retrieved={result.get('retrieval_count', chat_k)} → kept={chat_final_k}"
+            st.caption(meta)
 
-            st.caption(f"⏱️ {elapsed:.1f}s · k={k_value} chunks retrieved")
-
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": response,
-            "sources": clean_sources if sources else [],
-            "time": elapsed,
-            "k": k_value
+        st.session_state.chat_messages.append({
+            "role": "assistant", "content": result["response"],
+            "sources": clean_sources, "scores": scores, "meta": meta
         })
 
-    # Clear chat button
-    if st.session_state.messages:
+    if st.session_state.chat_messages:
         if st.button("🗑️ Clear conversation"):
-            st.session_state.messages = []
+            st.session_state.chat_messages = []
             st.rerun()
 
 
-# ══════════════════════════════════════════════════════════════
-# PAGE 2 — LIVE DASHBOARD
-# ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
+# PAGE 3 — DASHBOARD
+# ══════════════════════════════════════════════════════════
 elif page == "📊 Live Dashboard":
+    st.title("📊 System Dashboard")
+    st.caption("Live stats from ChromaDB and Ollama")
 
-    st.title("📊 RAG System Dashboard")
-    st.caption("Live stats from your local ChromaDB and Ollama")
-
-    # Refresh button
-    col_title, col_btn = st.columns([4, 1])
+    col_h, col_btn = st.columns([5, 1])
     with col_btn:
         if st.button("🔄 Refresh", use_container_width=True):
             st.cache_resource.clear()
@@ -393,178 +362,84 @@ elif page == "📊 Live Dashboard":
 
     st.divider()
 
-    # ── Top metrics ──────────────────────────────────────────
-    client = get_chroma_client()
-    collection = get_collection(client) if client else None
-    models, ollama_ok = get_ollama_models()
-
-    chunk_count  = collection.count() if collection else 0
     source_files = get_source_files(collection) if collection else []
-    model_names  = [m["name"] for m in models]
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric("📦 Chunks in DB", chunk_count)
-    with col2:
-        st.metric("📄 PDFs Indexed", len(source_files))
-    with col3:
-        st.metric("🦙 Ollama Models", len(models))
-    with col4:
-        st.metric("💰 Cost", "$0.00")
-    with col5:
-        st.metric("🔒 Privacy", "100% Local")
+    m1,m2,m3,m4,m5,m6 = st.columns(6)
+    m1.metric("📦 Chunks", chunk_count)
+    m2.metric("📄 PDFs", len(source_files))
+    m3.metric("🦙 Models", len(models))
+    m4.metric("🔄 Strategies", "3")
+    m5.metric("💰 Cost", "$0.00")
+    m6.metric("🔒 Privacy", "100% Local")
 
     st.divider()
-
-    # ── Two column layout ────────────────────────────────────
     left, right = st.columns(2)
 
     with left:
-        # Component status
         st.markdown("### 🔧 Components")
-
-        components = [
-            ("🦙", "Ollama", "v0.21.1 · local LLM server",
-             "Running" if ollama_ok else "Offline", ollama_ok),
-            ("🌪️", "Mistral 7B", "4.4 GB · generation model",
-             "Loaded" if any("mistral" in m.lower() for m in model_names) else "Not loaded",
-             any("mistral" in m.lower() for m in model_names)),
-            ("🔢", "nomic-embed-text", "274 MB · embedding model",
-             "Loaded" if any("nomic" in m.lower() for m in model_names) else "Not loaded",
-             any("nomic" in m.lower() for m in model_names)),
-            ("🗄️", "ChromaDB", f"v1.5.8 · {chunk_count} chunks",
-             "Connected" if collection else "Error", collection is not None),
-            ("🔗", "LangChain", "v1.2.15 · orchestration",
-             "Active", True),
-            ("🐍", "Python", f"{sys.version.split()[0]}",
-             "Running", True),
+        comps = [
+            ("🦙","Ollama","v0.21.1","Running" if ollama_ok else "Offline", ollama_ok),
+            ("🌪️","Mistral 7B","4.4 GB · LLM","Loaded" if any("mistral" in m.lower() for m in model_names) else "Not loaded", any("mistral" in m.lower() for m in model_names)),
+            ("🔢","nomic-embed-text","274 MB · embedder","Loaded" if any("nomic" in m.lower() for m in model_names) else "Not loaded", any("nomic" in m.lower() for m in model_names)),
+            ("🏆","Cross-encoder re-ranker","ms-marco-MiniLM-L-6-v2","Cached locally", True),
+            ("🗄️","ChromaDB","v1.5.8","Connected" if collection else "Error", collection is not None),
+            ("🔗","LangChain","v1.2.15","Active", True),
         ]
-
-        for icon, name, detail, status, is_ok in components:
-            col_info, col_badge = st.columns([3, 1])
-            with col_info:
+        for icon,name,detail,status,ok in comps:
+            ci,cb = st.columns([3,1])
+            with ci:
                 st.markdown(f"**{icon} {name}**")
                 st.caption(detail)
-            with col_badge:
-                badge_class = "badge-green" if is_ok else "badge-red"
-                st.markdown(
-                    f"<span class='{badge_class}'>{status}</span>",
-                    unsafe_allow_html=True
-                )
+            with cb:
+                badge = "badge-green" if ok else "badge-red"
+                st.markdown(f"<span class='{badge}'>{status}</span>", unsafe_allow_html=True)
             st.divider()
 
     with right:
-        # Indexed documents
-        st.markdown("### 📄 Indexed Documents")
-
-        if source_files:
-            for f in source_files:
-                # Parse filename for display
-                name = f.replace(".pdf", "").replace("apple_", "").upper()
-                parts = name.split("_")
-                if len(parts) >= 3:
-                    label = f"🍎 {parts[0]} {parts[1]} · {parts[2]}"
-                else:
-                    label = f"🍎 {name}"
-                st.caption(label)
-        else:
-            st.warning("No documents found. Run populate_database.py first.")
-
-    st.divider()
-
-    # ── Pipeline flow ────────────────────────────────────────
-    st.markdown("### ⚙️ RAG Pipeline")
-
-    p1, p2, p3, p4, p5, p6, p7, p8 = st.columns(8)
-    steps = [
-        ("📄", "PDFs", f"{len(source_files)} files"),
-        ("✂️", "Chunker", "800 chars"),
-        ("🔢", "Embedder", "nomic-embed"),
-        ("🗄️", "ChromaDB", f"{chunk_count} vectors"),
-        ("❓", "Query", "your question"),
-        ("🎯", "Retrieve", "top-k chunks"),
-        ("🌪️", "Mistral", "generates"),
-        ("✅", "Answer", "+ sources"),
-    ]
-    for col, (icon, name, detail) in zip(
-        [p1,p2,p3,p4,p5,p6,p7,p8], steps
-    ):
-        with col:
-            st.markdown(
-                f"""<div style='text-align:center; background:#1a1d24;
-                border:1px solid #2a2d35; border-radius:8px; padding:10px;'>
-                <div style='font-size:22px'>{icon}</div>
-                <div style='font-size:11px; font-weight:600; margin-top:4px'>{name}</div>
-                <div style='font-size:10px; color:#6b7280'>{detail}</div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-
-    st.divider()
-
-    # ── ChromaDB chunk explorer ──────────────────────────────
-    st.markdown("### 🔍 ChromaDB Chunk Explorer")
-
-    if collection:
-        selected_file = st.selectbox(
-            "Select a document to inspect its chunks:",
-            ["All documents"] + source_files
-        )
-
-        if selected_file == "All documents":
-            results = collection.get(
-                limit=10,
-                include=["documents", "metadatas"]
-            )
-        else:
-            results = collection.get(
-                where={"source": {"$eq": f"data\\{selected_file}"}},
-                limit=10,
-                include=["documents", "metadatas"]
-            )
-
-        if results["documents"]:
-            for i, (doc, meta) in enumerate(
-                zip(results["documents"], results["metadatas"])
-            ):
-                with st.expander(f"Chunk {i+1} — {meta.get('source', 'unknown')} · page {meta.get('page', '?')}"):
-                    st.text(doc[:500] + "..." if len(doc) > 500 else doc)
-                    st.caption(f"Metadata: {meta}")
-        else:
-            st.info("No chunks found for this document.")
-    else:
-        st.error("ChromaDB not connected. Run populate_database.py first.")
-
-    st.divider()
-
-    # ── System info ──────────────────────────────────────────
-    st.markdown("### 💻 Environment")
-
-    env_col1, env_col2 = st.columns(2)
-    with env_col1:
-        st.markdown("**Python packages:**")
-        packages = [
-            "langchain", "langchain_community",
-            "langchain_chroma", "langchain_ollama",
-            "chromadb", "pypdf", "streamlit"
+        st.markdown("### 🆕 Advanced RAG Features")
+        feats = [
+            ("✏️","Simple query rewriting","Rewrites into Apple press release language"),
+            ("📋","Multi-query (3 phrasings)","Wider retrieval pool for trend questions"),
+            ("🧠","HyDE","Hypothetical answer as search vector"),
+            ("🏆","Cross-encoder re-ranking","Scores query+chunk pairs for precision"),
+            ("📊","Re-rank confidence scores","Visible per-chunk relevance scores"),
+            ("⚡","Basic vs Advanced compare","Side-by-side pipeline comparison"),
         ]
-        for pkg in packages:
-            try:
-                mod = __import__(pkg)
-                version = getattr(mod, "__version__", "✓")
-                st.caption(f"✅ {pkg} {version}")
-            except ImportError:
-                st.caption(f"❌ {pkg} not found")
+        for icon,name,detail in feats:
+            fi,fb = st.columns([3,1])
+            with fi:
+                st.markdown(f"**{icon} {name}**")
+                st.caption(detail)
+            with fb:
+                st.markdown("<span class='badge-green'>Active</span>", unsafe_allow_html=True)
+            st.divider()
 
-    with env_col2:
-        st.markdown("**Ollama models:**")
-        if models:
-            for m in models:
-                st.caption(f"✅ {m['name']} · {m['size']} {m['unit']}")
+    st.markdown("### ⚙️ Advanced RAG Pipeline")
+    steps = [("❓","Question","as typed"),("✏️","Rewriter","3 strategies"),
+             ("🔢","Embed","nomic"),("🗄️","Retrieve","top-20 pool"),
+             ("🏆","Re-rank","cross-encoder"),("📋","Inject","best 5"),
+             ("🌪️","Mistral","generate"),("✅","Answer","+ scores")]
+    pipe_cols = st.columns(8)
+    for col,(icon,name,detail) in zip(pipe_cols,steps):
+        with col:
+            st.markdown(f"""<div style='text-align:center;background:#1a1d24;border:1px solid
+            #2a2d35;border-radius:8px;padding:10px;'>
+            <div style='font-size:20px'>{icon}</div>
+            <div style='font-size:11px;font-weight:600;margin-top:4px'>{name}</div>
+            <div style='font-size:10px;color:#6b7280'>{detail}</div></div>""",
+            unsafe_allow_html=True)
+
+    st.divider()
+    st.markdown("### 🔍 ChromaDB Chunk Explorer")
+    if collection:
+        sel = st.selectbox("Inspect chunks from:", ["All documents"] + (source_files if source_files else []))
+        if sel == "All documents":
+            res = collection.get(limit=8, include=["documents","metadatas"])
         else:
-            st.caption("❌ No models found or Ollama not running")
-
-        st.markdown("**Paths:**")
-        st.caption(f"📁 Data: ./{DATA_PATH}/")
-        st.caption(f"🗄️ ChromaDB: ./{CHROMA_PATH}/")
-        st.caption(f"🐍 Python: {sys.executable}")
+            res = collection.get(where={"source":{"$eq":f"data\\{sel}"}},
+                                 limit=8, include=["documents","metadatas"])
+        for i,(doc,meta) in enumerate(zip(res["documents"], res["metadatas"])):
+            with st.expander(f"Chunk {i+1} — {meta.get('source','?')} · page {meta.get('page','?')}"):
+                st.text(doc[:500]+"..." if len(doc)>500 else doc)
+                st.caption(str(meta))
+    else:
+        st.error("ChromaDB not connected.")
